@@ -2,6 +2,27 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from flask import Flask, render_template, Response
+import mysql.connector
+from datetime import datetime
+
+# MySQL setup
+conn = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="1234",
+    database="surveillance_sys"
+)
+cursor = conn.cursor()
+
+# Create table if not exists
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event TEXT,
+    timestamp DATETIME,
+    location VARCHAR(255)
+)
+""")
 
 # Mediapipe setup
 face_detection = mp.solutions.face_detection.FaceDetection(min_detection_confidence=0.4)
@@ -13,6 +34,16 @@ output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
 
 # Flask setup
 app = Flask(__name__)
+
+# Event logger
+def log_event(event):
+    event_data = (
+        event,
+        datetime.now(),
+        "Camera 1"
+    )
+    cursor.execute("INSERT INTO events (event, timestamp, location) VALUES (%s, %s, %s)", event_data)
+    conn.commit()
 
 # object detection
 def detect_obj(frame):
@@ -33,7 +64,7 @@ def detect_obj(frame):
                 x = int(center_x - w / 2)
                 y = int(center_y - h / 2)
                 cv2.rectangle(frame, (x, y), (x + w, y +h), (255, 0, 0), 2)
-
+                log_event(f"Object detected: Class ID {class_id} with confidence (confidence: .2f)")
 
 # face detection
 def detect_faces(frame):
@@ -48,6 +79,7 @@ def detect_faces(frame):
             w = int(bboxC.width * iw)
             h = int(bboxC.height * ih)
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            log_event("Face Detected")
 
 def main():
     cap = cv2.VideoCapture(0)
