@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS events (
 """)
 
 # Mediapipe setup
-face_detection = mp.solutions.face_detection.FaceDetection(min_detection_confidence=0.4)
+face_detection = mp.solutions.face_detection.FaceDetection(min_detection_confidence=0.5)
 
 # YOLO setup
 net = cv2.dnn.readNet("models/yolov4.weights", "models/yolov4.cfg")
@@ -37,13 +37,19 @@ app = Flask(__name__)
 
 # Event logger
 def log_event(event):
-    event_data = (
-        event,
-        datetime.now(),
-        "Camera 1"
-    )
-    cursor.execute("INSERT INTO events (event, timestamp, location) VALUES (%s, %s, %s)", event_data)
-    conn.commit()
+    current_time = datetime.now()
+
+    cursor.execute("SELECT MAX(timestamp) FROM events WHERE event= %s", (event,))
+    last_event_time = cursor.fetchone()[0]
+
+    if last_event_time is None or (current_time - last_event_time).total_seconds() > 60:
+        event_data = (
+            event,
+            datetime.now(),
+            "Camera 1"
+        )
+        cursor.execute("INSERT INTO events (event, timestamp, location) VALUES (%s, %s, %s)", event_data)
+        conn.commit()
 
 # object detection
 def detect_obj(frame):
@@ -83,6 +89,9 @@ def detect_faces(frame):
 
 def main():
     cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Cannot Capture Video.")
+        exit()
 
     while True:
         ret, frame = cap.read()
